@@ -3,15 +3,52 @@
 #include <syslog.h>
 #include <dirent.h>
 #include <string.h>
-
+#include <limits.h>
 #include <fstream>
 
-#include "config.h"
 #include "daemon.h"
 
 using namespace std;
 
 const string Daemon::ABS_PID_PATH = "/var/run/daemon.pid";
+
+const string& Daemon::GetAbsoluteFolderPath()
+{
+    return absfldrPath;
+}
+
+int Daemon::GetInterval()
+{
+    return interval;
+}
+
+void Daemon::ReadConfig()
+{
+    ifstream cfgFile(absPath);
+    cfgFile >> absfldrPath >> interval;
+
+    if (cfgFile.eof())
+    {
+        syslog(LOG_ERR, "Bad config.");
+        exit(EXIT_FAILURE);
+    }
+
+    cfgFile.close();
+    syslog(LOG_INFO, "Read config.");
+}
+
+Daemon::Daemon(char *cfgName)
+{
+    char buf[PATH_MAX];
+
+    if (realpath(cfgName, buf) == nullptr)
+    {
+        syslog(LOG_ERR, "Config doesn't exist.");
+        exit(EXIT_FAILURE);
+    }
+    Daemon::absPath = buf;
+    ReadConfig();
+}
 
 void Daemon::ProtectAgainstRestart()
 {
@@ -34,7 +71,7 @@ void Daemon::HandleSignal(int sigNum)
         case SIGHUP:
         {
             syslog(LOG_INFO, "Catched SIGHUP.");
-            Config &cfg = Config::GetInstance();
+            Daemon &cfg = Daemon::GetInstance();
             cfg.ReadConfig();
             break;
         }
@@ -49,8 +86,8 @@ void Daemon::HandleSignal(int sigNum)
 
 void Daemon::DeleteAllTmp()
 {
-    Config &cfg = Config::GetInstance();
-    DIR *dir = opendir(cfg.GetAbsoluteFolderPath().c_str());
+    //Daemon &dmn = Daemon::GetInstance();
+    DIR *dir = opendir(GetAbsoluteFolderPath().c_str());
 
     if (dir == nullptr)
     {
@@ -67,7 +104,7 @@ void Daemon::DeleteAllTmp()
             if (fileName.length() >= 4)
                 if (strcmp(".tmp", &(entry->d_name[fileName.length() - 4])) == 0)
                 {
-                    string filePath = cfg.GetAbsoluteFolderPath() + "/" + fileName;
+                    string filePath = GetAbsoluteFolderPath() + "/" + fileName;
                     if (remove(filePath.c_str()) != 0)
                         syslog(LOG_ERR, "Couldn't remove file %s", filePath.c_str());
 
@@ -76,4 +113,10 @@ void Daemon::DeleteAllTmp()
     }
 
     closedir(dir);
+}
+
+Daemon& Daemon::GetInstance(char *cfgName)
+{
+    static Daemon instance(cfgName);
+    return instance;
 }

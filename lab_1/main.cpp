@@ -5,7 +5,6 @@
 
 #include <iostream>
 
-#include "config.h"
 #include "daemon.h"
 
 using namespace std;
@@ -22,7 +21,7 @@ int main(int argc, char **argv)
     syslog(LOG_INFO, "Opened a connection to the system logger.");
     syslog(LOG_INFO, "Run.");
 
-    Config &cfg = Config::GetInstance(argv[1]);
+    Daemon &dmn = Daemon::GetInstance(argv[1]);
 
     pid_t pid = fork();
 
@@ -34,7 +33,7 @@ int main(int argc, char **argv)
 
     if (pid != 0)
         exit(EXIT_SUCCESS);
-    
+
     if (setsid() == (pid_t)(-1))
     {
         syslog(LOG_ERR, "Setsid error.");
@@ -42,23 +41,6 @@ int main(int argc, char **argv)
     }
 
     umask(0);
-
-    pid = fork();
-
-    if (pid == -1)
-    {
-        syslog(LOG_ERR, "Second fork error.");
-        exit(EXIT_FAILURE);
-    }
-
-    if (pid != 0)
-        exit(EXIT_SUCCESS);
-    
-    if (chdir("/") == -1)
-    {
-        syslog(LOG_ERR, "Chdir error.");
-        exit(EXIT_FAILURE);
-    }
 
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
@@ -71,7 +53,7 @@ int main(int argc, char **argv)
 
     while (true)
     {
-        Daemon::DeleteAllTmp();
-        sleep(cfg.GetInterval());
+        dmn.DeleteAllTmp();
+        sleep(dmn.GetInterval());
     }
 }
