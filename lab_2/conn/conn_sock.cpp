@@ -1,5 +1,6 @@
 #include <cstring>
 #include <iostream>
+#include <pthread.h>
 #include <stdexcept>
 #include <sys/syslog.h>
 #include <sys/un.h>
@@ -30,9 +31,7 @@ class ConnSocket : public Conn {
                 throw std::runtime_error("Can't listen connection");
             }
 
-            if ((clientSocket = accept(hostSocket, NULL, NULL)) < 0) {
-                throw std::runtime_error("Can't accept client socket");
-            }
+            pthread_create(&accept_thread, NULL, ConnSocket::accept_socket, this);
         } else {
             if ((clientSocket = socket(AF_UNIX, SOCK_SEQPACKET, 0)) < 0) {
                 throw std::runtime_error("Can't create client socket");
@@ -67,21 +66,37 @@ class ConnSocket : public Conn {
     }
 
     void read(Message &msg) override {
+        if (isHost)
+            pthread_join(accept_thread, NULL);
+
         if (recv(clientSocket, &msg, sizeof(Message), 0) < 0) {
             throw std::runtime_error("Failed to read from socket");
         }
     }
     void write(const Message &msg) override {
+        if (isHost)
+            pthread_join(accept_thread, NULL);
+
         if (send(clientSocket, &msg, sizeof(Message), MSG_NOSIGNAL) < 0) {
             throw std::runtime_error("Failed to write to socket");
         }
     }
 
   private:
+    static void *accept_socket(void *conn) {
+        if ((((ConnSocket *)conn)->clientSocket = accept(((ConnSocket *)conn)->hostSocket, NULL, NULL)) < 0) {
+            throw std::runtime_error("Can't accept client socket");
+        }
+
+        pthread_exit(NULL);
+    }
+
     static constexpr size_t MAX_CLIENT_NUM = 1;
 
     socklen_t hostSocket;
     socklen_t clientSocket;
+
+    pthread_t accept_thread;
 
     bool isHost = false;
     std::string name;
